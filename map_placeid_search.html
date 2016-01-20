@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head runat="server">
+    <title>Pepper Map</title>
+    <script type='text/javascript' 
+            src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>   
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAYuavI82CQ-LzPTksBYRZ-jIpqO-oN1Pk&libraries=places"></script>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style>
+        body,input { font-size: 9pt; }
+        html { height: 100% }  
+        body { height: 100%; margin: 0px; padding: 0px }  
+        #map_canvas { height: 100% }        
+    </style>
+    <script>
+        function getPinColor(input) {
+            if (input == "a") return "http://maps.google.com/mapfiles/ms/icons/blue-dot.png";
+            if (input == "b") return "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+            if (input == "c") return "http://maps.google.com/mapfiles/ms/icons/purple-dot.png";
+            if (input == "d") return "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png";
+            if (input == "e") return "http://maps.google.com/mapfiles/ms/icons/green-dot.png";
+            if (input == "f") return "http://maps.google.com/mapfiles/ms/icons/pink-dot.png";
+            return "http://maps.google.com/mapfiles/ms/icons/ltblue-dot.png";
+        }
+        
+        $(function () {
+            var markers = [];
+            var autoCompleteService = new google.maps.places.AutocompleteService();
+            var geocoder = new google.maps.Geocoder();
+            var c = 0;
+
+            function geocodeAjax(name, title, addr, industry, corp) {
+                var def = new jQuery.Deferred();
+                setTimeout(function() {
+                    autoCompleteService.getQueryPredictions({ input: name }, function(predictions, status) {
+                        if (status != google.maps.places.PlacesServiceStatus.OK) {
+                            console.log(name);
+                            def.resolve();
+                        } else {
+                            geocoder.geocode({ placeId: predictions[0].place_id }, function (results, status) {
+                                if (status == google.maps.GeocoderStatus.OK) {
+                                    var loc = results[0].geometry.location;
+                                    var placesService = new google.maps.places.PlacesService(document.getElementById("map_canvas"));
+                                        placesService.getDetails({ placeId: predictions[0].place_id }, function(place, status) {
+                                            markers.push({
+                                            title: title,
+                                            latlng: new google.maps.LatLng(loc.lat(), loc.lng()),
+                                            url: place.url,
+                                            icon: getPinColor(industry),
+                                            industry: industry,
+                                            address: place.formatted_address,
+                                            corp: corp
+                                        });
+                                    
+                                    });
+                                    def.resolve();
+                                }
+                                else {
+                                    console.log(name);
+                                    def.resolve();
+                                }
+                            });
+                        }
+                    });
+                }, c++ * 500);
+                return def.promise();
+            }
+            $.getJSON("addresses.json", {}, function (json) {
+                var deferredArray = [];
+                for (var i = 0; i < json.addresses.length; i++) {
+                    var name = json.addresses[i].name;
+                    var title = json.addresses[i].title;
+                    var address = json.addresses[i].address;
+                    var corp = json.addresses[i].corp;
+                    var industry = json.addresses[i].industry;
+                    deferredArray.push(geocodeAjax(name, title, address, industry, corp));
+                }
+                $.when.apply(null, deferredArray).then(function () {
+                    var mapOptions = {
+                        mapTypeId: google.maps.MapTypeId.ROADMAP
+                    };
+                    var map = new google.maps.Map(
+                        document.getElementById("map_canvas"), mapOptions);
+                    var bounds = new google.maps.LatLngBounds();
+                    for (var i = 0; i < markers.length; i++) {
+                        var m = markers[i];
+                        bounds.extend(m.latlng);
+                        var marker = new google.maps.Marker({
+                            icon: m.icon,
+                            position: m.latlng,
+                            title: m.title,
+                            map: map,
+                            url: m.url,
+                            industry: m.industry,
+                            address: m.address,
+                            corp: m.corp
+                        });
+                        var infowindow = new google.maps.InfoWindow();
+                        google.maps.event.addListener(marker, 'click', function() {
+                            infowindow.setContent('<strong><a href=' + this.url + ' target="_blank">' + this.title + '</a></strong>' + 
+                                '<p>事業: ' + this.industry + 
+                                '<br/>会社: ' + this.corp + 
+                                '<br/>住址: ' + this.address + '</p>');
+                            infowindow.open(map, this); 
+                        });
+                    }
+                    map.fitBounds(bounds);
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+<div id="map_canvas" style="width:100%; height:100%"></div>
+</body>
+</html>
